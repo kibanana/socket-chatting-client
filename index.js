@@ -4,17 +4,18 @@ const socket = require(`socket.io-client`)(`http://127.0.0.1:3000`, {
 const inquirer = require('inquirer');
 const themedLog = require('./themedLog');
 
-let me = { name: undefined, loudSpeakerOn: true };
+let me = { name: undefined, loudSpeakerOn: true, room: [] };
 
 const meLog = () => {
-    console.log(`[ ${me.name} ] - ${me.loudSpeakerOn ? '확성기' : ''} - ${me.room}`);
+    console.log(`[ ${me.name} ] - ${me.loudSpeakerOn ? '확성기' : ''} - ${me.room.length > 0 ? `${me.room.length}개` : '방 없음'}`);
 };
 
 const choiceLog = async () => {
     const choiceMap = {
         '이름변경': 'change_name',
         '확성기': 'global_message',
-        '확성기설정변경': 'update_global_message_settings'
+        '확성기설정변경': 'update_global_message_settings',
+        '방만들기': 'create_room'
     };
     const choices = Object.keys(choiceMap);
 
@@ -30,13 +31,13 @@ const choiceLog = async () => {
         ]);
     
     let behaviorText = undefined;
-    if (choices[0] === behaviorChoice || choices[1] === behaviorChoice) {
+    if (choices[0] === behaviorChoice || choices[1] === behaviorChoice || choices[3] === behaviorChoice) {
         behaviorText = (await inquirer
             .prompt([
                 {
                     type: 'input',
                     name: 'behaviorText',
-                    message: '동작 상세정보를 입력해주세요'
+                    message: `'${behaviorChoice}' 동작 상세정보를 입력해주세요`
                 }
             ])
         ).behaviorText;
@@ -82,6 +83,8 @@ socket.on('admin_message', async (data) => {
         me.name = data.name;
     } else if (data.hasOwnProperty('loudSpeakerOn')) {
         me.loudSpeakerOn = data.loudSpeakerOn;
+    } else if (data.room) {
+        me.room.push(data.room);
     }
 
     meLog();
