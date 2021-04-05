@@ -1,6 +1,7 @@
 const socket = require(`socket.io-client`)(`http://127.0.0.1:3000`, {
     transports: [`websocket`]
 });
+const clear = require('clear');
 const inquirer = require('inquirer');
 const themedLog = require('./themedLog');
 
@@ -8,27 +9,23 @@ let me = { name: undefined, loudSpeakerOn: true, room: [] };
 let userMap = {};
 let writeLogFlag = true;
 
-const meLog = () => {
-    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.room.length > 0 ? `${me.room.length}개` : '방 없음'}`);
-};
-
 const choiceLog = async () => {
-    const choiceMap = {
-        '이름변경': 'change_name',
-        '확성기': 'global_message',
-        '확성기설정변경': 'update_global_message_settings',
-        '방만들기': 'create_room',
-    };
-    
-    if (me.room.length > 0) {
-        choiceMap['메세지보내기'] = 'send_message';
-    }
+    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.room.length > 0 ? `${me.room.length}개(${me.room.join(', ')})` : '방 없음'}`);
 
+    const choiceMap = {};
+    choiceMap['이름변경'] = 'change_name';
+    choiceMap['방만들기'] = 'create_room';
+
+    if (me.room.length > 0) choiceMap['메세지보내기'] = 'send_message';
+
+    choiceMap['확성기'] = 'global_message';
+    choiceMap['확성기설정변경'] = 'update_global_message_settings';
+    
     const choices = Object.keys(choiceMap);
     let behaviorChoice = undefined;
     let behaviorText = undefined;
     let behaviorArguments = undefined;
-    let result = undefined;
+    let optionalParam = {};
 
     behaviorChoice = (await inquirer
         .prompt([
@@ -42,7 +39,7 @@ const choiceLog = async () => {
         ])
     ).behaviorChoice;
     
-    if (choices[0] === behaviorChoice || choices[1] === behaviorChoice || choices[3] === behaviorChoice) {
+    if (['이름변경', '방만들기', '메세지보내기', '확성기'].includes(behaviorChoice)) {
         behaviorText = (await inquirer
             .prompt([
                 {
@@ -54,10 +51,9 @@ const choiceLog = async () => {
         ).behaviorText;
     }
 
-    if (choices.length > 3 && choices[3] === behaviorChoice && Object.keys(userMap).length > 0) {
-        const userKeys = Object.keys(userMap);
-        const userValues = Object.values(userMap).map(elem => elem.name);
-
+    const userKeys = Object.keys(userMap);
+    const userValues = Object.values(userMap).map(elem => elem.name);
+    if ('방만들기' === behaviorChoice && userKeys.length > 0) {
         behaviorArguments = (await inquirer
             .prompt([
                 {
@@ -74,10 +70,25 @@ const choiceLog = async () => {
         }
     }
 
+    if ('메세지보내기' === behaviorChoice) {
+        optionalParam.room = me.room[0];
+    }
+
     writeLogFlag = true;
 
-    socket.emit(choiceMap[behaviorChoice], { text: behaviorText, arguments: behaviorArguments });
+    socket.emit(choiceMap[behaviorChoice], {
+        text: behaviorText,
+        arguments: behaviorArguments,
+        ...optionalParam
+    });
 };
+
+const prePrint = async () => {
+    if (writeLogFlag) {
+        writeLogFlag = false;
+        await choiceLog();
+    }
+}
 
 socket.on('connect', () => {
     themedLog.systemSuccess('[ SYSTEM ] 채팅 서버에 연결되었습니다!');
@@ -94,6 +105,7 @@ socket.on('connect_error', () => {
 
 socket.on('disconnect', () => {
     themedLog.systemError('[ SYSTEM ] 채팅 서버와 연결이 끊겼습니다!');
+    process.exit(0);
 });
 
 socket.on('error', (error) => {
@@ -110,8 +122,6 @@ socket.on('reconnect_failed', () => {
 
 
 socket.on('admin_message', async (data) => {
-    themedLog.systemSuccess(`[ SYSTEM ] ${data.message}`);
-
     if (data.name) {
         me.name = data.name;
     }
@@ -120,6 +130,8 @@ socket.on('admin_message', async (data) => {
     }
     if (data.room) {
         me.room.push(data.room);
+        clear();
+        writeLogFlag = true;
     }
     if (data.userMap) {
         userMap = { ...userMap, ...data.userMap };
@@ -127,11 +139,9 @@ socket.on('admin_message', async (data) => {
         delete userMap[Object.keys(userMap)[idx]];
     }
 
-    if (writeLogFlag) {
-        writeLogFlag = false;
-        meLog();
-        await choiceLog();
-    }
+    themedLog.systemSuccess(`[ SYSTEM ] ${data.message}`);
+
+    await prePrint();
 });
 
 socket.on('admin_data', async (data) => {
@@ -143,12 +153,8 @@ socket.on('admin_data', async (data) => {
         const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
         delete userMap[Object.keys(userMap)[idx]];
     }
-    
-    if (writeLogFlag) {
-        writeLogFlag = false;
-        meLog();
-        await choiceLog();
-    }
+
+    await prePrint();
 });
 
 socket.on('admin_delete_data', async (data) => {
@@ -156,21 +162,13 @@ socket.on('admin_delete_data', async (data) => {
         delete userMap[data.user];
     }
 
-    if (writeLogFlag) {
-        writeLogFlag = false;
-        meLog();
-        await choiceLog();
-    }
+    await prePrint();
 });
 
 socket.on('admin_error', async (data) => {
     themedLog.systemError(`[ SYSTEM ] ${data.message}`);
 
-    if (writeLogFlag) {
-        writeLogFlag = false;
-        meLog();
-        await choiceLog();
-    }
+    await prePrint();
 });
 
 socket.on('notice', (data) => {
@@ -178,6 +176,14 @@ socket.on('notice', (data) => {
 });
 
 
-socket.on('global_message', (data) => {
+socket.on('global_message', async (data) => {
     themedLog.other(data.user, data.message);
+
+    await prePrint(writeLogFlag);
+})
+
+socket.on('send_message', async (data) => {
+    themedLog.other(data.user, data.message);
+
+    await prePrint(writeLogFlag);
 })

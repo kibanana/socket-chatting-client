@@ -20,6 +20,7 @@
   "homepage": "https://github.com/woni-d/socket-chatting-client#readme",
   "dependencies": {
     "chalk": "^4.1.0",
+    "clear": "^0.1.0",
     "inquirer": "^8.0.0",
     "socket.io-client": "^4.0.1"
   }
