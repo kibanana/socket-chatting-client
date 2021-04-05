@@ -5,9 +5,11 @@ const inquirer = require('inquirer');
 const themedLog = require('./themedLog');
 
 let me = { name: undefined, loudSpeakerOn: true, room: [] };
+let userMap = {};
+let writeLogFlag = true;
 
 const meLog = () => {
-    console.log(`[ ${me.name} ] - ${me.loudSpeakerOn ? '확성기' : ''} - ${me.room.length > 0 ? `${me.room.length}개` : '방 없음'}`);
+    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.room.length > 0 ? `${me.room.length}개` : '방 없음'}`);
 };
 
 const choiceLog = async () => {
@@ -15,11 +17,20 @@ const choiceLog = async () => {
         '이름변경': 'change_name',
         '확성기': 'global_message',
         '확성기설정변경': 'update_global_message_settings',
-        '방만들기': 'create_room'
+        '방만들기': 'create_room',
     };
-    const choices = Object.keys(choiceMap);
+    
+    if (me.room.length > 0) {
+        choiceMap['메세지보내기'] = 'send_message';
+    }
 
-    const { behaviorChoice } = await inquirer
+    const choices = Object.keys(choiceMap);
+    let behaviorChoice = undefined;
+    let behaviorText = undefined;
+    let behaviorArguments = undefined;
+    let result = undefined;
+
+    behaviorChoice = (await inquirer
         .prompt([
             {
                 type: 'rawlist',
@@ -28,9 +39,9 @@ const choiceLog = async () => {
                 choices: choices,
                 pageSize: 10
             }
-        ]);
+        ])
+    ).behaviorChoice;
     
-    let behaviorText = undefined;
     if (choices[0] === behaviorChoice || choices[1] === behaviorChoice || choices[3] === behaviorChoice) {
         behaviorText = (await inquirer
             .prompt([
@@ -43,7 +54,29 @@ const choiceLog = async () => {
         ).behaviorText;
     }
 
-    socket.emit(choiceMap[behaviorChoice], { text: behaviorText });
+    if (choices.length > 3 && choices[3] === behaviorChoice && Object.keys(userMap).length > 0) {
+        const userKeys = Object.keys(userMap);
+        const userValues = Object.values(userMap).map(elem => elem.name);
+
+        behaviorArguments = (await inquirer
+            .prompt([
+                {
+                    type: 'checkbox',
+                    name: 'behaviorArguments',
+                    message: `어떤 유저를 방에 초대하시겠어요?`,
+                    choices: userValues
+                }
+            ])
+        ).behaviorArguments;
+
+        for (let i = 0; i < behaviorArguments.length; i++) {
+            behaviorArguments[i] = userKeys[userValues.indexOf(behaviorArguments[i])];
+        }
+    }
+
+    writeLogFlag = true;
+
+    socket.emit(choiceMap[behaviorChoice], { text: behaviorText, arguments: behaviorArguments });
 };
 
 socket.on('connect', () => {
@@ -81,30 +114,63 @@ socket.on('admin_message', async (data) => {
 
     if (data.name) {
         me.name = data.name;
-    } else if (data.hasOwnProperty('loudSpeakerOn')) {
+    }
+    if (data.hasOwnProperty('loudSpeakerOn')) {
         me.loudSpeakerOn = data.loudSpeakerOn;
-    } else if (data.room) {
+    }
+    if (data.room) {
         me.room.push(data.room);
     }
+    if (data.userMap) {
+        userMap = { ...userMap, ...data.userMap };
+        const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
+        delete userMap[Object.keys(userMap)[idx]];
+    }
 
-    meLog();
-    await choiceLog();
+    if (writeLogFlag) {
+        writeLogFlag = false;
+        meLog();
+        await choiceLog();
+    }
 });
 
 socket.on('admin_data', async (data) => {
     if (data.name) {
         me.name = data.name;
     }
+    if (data.userMap) {
+        userMap = { ...userMap, ...data.userMap };
+        const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
+        delete userMap[Object.keys(userMap)[idx]];
+    }
+    
+    if (writeLogFlag) {
+        writeLogFlag = false;
+        meLog();
+        await choiceLog();
+    }
+});
 
-    meLog();
-    await choiceLog();
+socket.on('admin_delete_data', async (data) => {
+    if (data.user) {
+        delete userMap[data.user];
+    }
+
+    if (writeLogFlag) {
+        writeLogFlag = false;
+        meLog();
+        await choiceLog();
+    }
 });
 
 socket.on('admin_error', async (data) => {
     themedLog.systemError(`[ SYSTEM ] ${data.message}`);
 
-    meLog();
-    await choiceLog();
+    if (writeLogFlag) {
+        writeLogFlag = false;
+        meLog();
+        await choiceLog();
+    }
 });
 
 socket.on('notice', (data) => {
