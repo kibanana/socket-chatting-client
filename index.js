@@ -5,18 +5,22 @@ const clear = require('clear');
 const inquirer = require('inquirer');
 const themedLog = require('./themedLog');
 
-let me = { name: undefined, loudSpeakerOn: true, room: [] };
+let me = { name: undefined, loudSpeakerOn: true, currentRoom: undefined };
 let userMap = {};
 let writeLogFlag = true;
 
 const choiceLog = async () => {
-    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.room.length > 0 ? `${me.room.length}개(${me.room.join(', ')})` : '방 없음'}`);
+    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.currentRoom ? `'${me.currentRoom})'` : '방 없음'}`);
 
     const choiceMap = {};
     choiceMap['이름변경'] = 'change_name';
+
+    if (me.currentRoom) choiceMap['방에서나가기'] = 'leave_room';
+    else choiceMap['방에들어가기'] = '';
+
     choiceMap['방만들기'] = 'create_room';
 
-    if (me.room.length > 0) choiceMap['메세지보내기'] = 'send_message';
+    if (me.currentRoom) choiceMap['메세지보내기'] = 'send_message';
 
     choiceMap['확성기'] = 'global_message';
     choiceMap['확성기설정변경'] = 'update_global_message_settings';
@@ -38,7 +42,7 @@ const choiceLog = async () => {
             }
         ])
     ).behaviorChoice;
-    
+
     if (['이름변경', '방만들기', '메세지보내기', '확성기'].includes(behaviorChoice)) {
         behaviorText = (await inquirer
             .prompt([
@@ -51,6 +55,32 @@ const choiceLog = async () => {
         ).behaviorText;
     }
 
+    if ('방에들어가기' === behaviorChoice) {
+        me.currentRoom = (await inquirer
+            .prompt([
+                {
+                    type: 'rawlist',
+                    name: 'selectedRoom',
+                    message: `어떤 방에 입장하시겠습니까? ${currentRoom ? `현재 '${currentRoom}'` : ''}`,
+                    choices: [] // get_room_list
+                }
+            ])
+        ).selectedRoom;
+
+        clear();
+        console.log(`============= ${me.currentRoom} =============`);
+        writeLogFlag = true;
+        return prePrint();
+    }
+
+    if ('방에서나가기' === behaviorChoice) {
+        socket.emit(choiceMap[behaviorChoice], {
+            room: me.currentRoom
+        });
+        me.currentRoom = undefined;
+        return await prePrint();
+    }
+    
     const userKeys = Object.keys(userMap);
     const userValues = Object.values(userMap).map(elem => elem.name);
     if ('방만들기' === behaviorChoice && userKeys.length > 0) {
@@ -70,8 +100,8 @@ const choiceLog = async () => {
         }
     }
 
-    if ('메세지보내기' === behaviorChoice) {
-        optionalParam.room = me.room[0];
+    if ('메세지보내기' === behaviorChoice && me.currentRoom) {
+        optionalParam.room = me.currentRoom;
     }
 
     writeLogFlag = true;
@@ -129,7 +159,7 @@ socket.on('admin_message', async (data) => {
         me.loudSpeakerOn = data.loudSpeakerOn;
     }
     if (data.room) {
-        me.room.push(data.room);
+        me.currentRoom = data.room;
         clear();
         writeLogFlag = true;
     }
@@ -183,7 +213,11 @@ socket.on('global_message', async (data) => {
 })
 
 socket.on('send_message', async (data) => {
-    themedLog.other(data.user, data.message);
+    if (me.name === data.user) {
+        themedLog.me(data.message);
+    } else {
+        themedLog.other(data.user, data.message);
+    }
 
     await prePrint(writeLogFlag);
 })
