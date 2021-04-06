@@ -11,7 +11,11 @@ let roomMap = {};
 let writeLogFlag = true;
 
 const choiceLog = async () => {
-    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.currentRoom ? `'(${me.currentRoom})'` : '방 없음'}`);
+    themedLog.systemSuccess(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}`);
+    if (me.currentRoom) {
+        const roomMaster = roomMap[me.currentRoom].users[0];
+        themedLog.systemSuccess(`============= ${me.currentRoom} ============= (${roomMap[me.currentRoom].users.length}명, 방 주인: ${roomMaster === me.id ? me.name : userMap[roomMaster].name})`);
+    }
 
     const choiceMap = {};
     choiceMap['이름변경'] = 'change_name';
@@ -24,8 +28,8 @@ const choiceLog = async () => {
         choiceMap['방만들기'] = 'create_room';
     }
 
-    choiceMap['확성기'] = 'global_message';
-    choiceMap['확성기설정변경'] = 'update_global_message_settings';
+    choiceMap['확성기'] = 'load_speaker';
+    choiceMap['확성기설정변경'] = 'update_loud_speaker_settings';
     
     const choices = Object.keys(choiceMap);
     let behaviorChoice = undefined;
@@ -45,7 +49,7 @@ const choiceLog = async () => {
         ])
     ).behaviorChoice;
 
-    if (['이름변경', '방만들기', '메세지보내기', '확성기'].includes(behaviorChoice)) {
+    if (['이름변경', '메세지보내기', '방만들기', '확성기'].includes(behaviorChoice)) {
         behaviorText = (await inquirer
             .prompt([
                 {
@@ -57,64 +61,55 @@ const choiceLog = async () => {
         ).behaviorText;
     }
 
-    if ('방에들어가기' === behaviorChoice) {
-        const roomKeys = Object.keys(roomMap);
-        console.log(roomMap);
-        
-        if (roomKeys.length > 0) {
-            me.currentRoom = (await inquirer
+    if ('메세지보내기' === behaviorChoice) {
+        optionalParam.room = me.currentRoom;
+    } else if ('방에서나가기' === behaviorChoice) {
+        socket.emit(choiceMap[behaviorChoice], { room: me.currentRoom });
+        me.currentRoom = undefined;
+        return writeLogFlag = true;
+    } else if ('방에들어가기' === behaviorChoice) {
+        if (Object.keys(roomMap).length > 0) {
+            const room = (await inquirer
                 .prompt([
                     {
                         type: 'rawlist',
                         name: 'selectedRoom',
-                        message: `어떤 방에 입장하시겠습니까? ${currentRoom ? `현재 '${currentRoom}'` : ''}`,
+                        message: `어떤 방에 입장하시겠습니까? ${me.currentRoom ? `현재 '${me.currentRoom}'` : ''}`,
                         choices: Object.keys(roomMap)
                     }
                 ])
             ).selectedRoom;
 
-            socket.emit(choiceMap[behaviorChoice], {
-                room: me.currentRoom,
-                arguments: behaviorArguments,
-                ...optionalParam
-            });
-
-            clear();
-            console.log(`============= ${me.currentRoom} =============`);
+            optionalParam.room = room;
+        } else {
+            themedLog.systemError(`[ SYSTEM ] 들어갈 방이 없습니다!`);
             writeLogFlag = true;
             return prePrint();
         }
-        else {
-            console.log('들어갈 방이 없습니다!');
-           await prePrint();
-        }
-    } else if ('방에서나가기' === behaviorChoice) {
-        socket.emit(choiceMap[behaviorChoice], {
-            room: me.currentRoom
-        });
-        me.currentRoom = undefined;
-        await prePrint();
-    } else if ('방만들기' === behaviorChoice && Object.keys(userMap).length > 0) {
+    } else if ('방만들기' === behaviorChoice) {
         const userKeys = Object.keys(userMap);
-        console.log(userKeys);
-        const userValues = Object.values(userMap).map(elem => elem.name);
-        
-        behaviorArguments = (await inquirer
-            .prompt([
-                {
-                    type: 'checkbox',
-                    name: 'behaviorArguments',
-                    message: `어떤 유저를 방에 초대하시겠어요?`,
-                    choices: userValues
-                }
-            ])
-        ).behaviorArguments;
-
-        for (let i = 0; i < behaviorArguments.length; i++) {
-            behaviorArguments[i] = userKeys[userValues.indexOf(behaviorArguments[i])];
+        if (userKeys.length > 0) {
+            const userValues = Object.values(userMap).map(elem => elem.name);
+            
+            behaviorArguments = (await inquirer
+                .prompt([
+                    {
+                        type: 'checkbox',
+                        name: 'behaviorArguments',
+                        message: `어떤 유저를 방에 초대하시겠어요?`,
+                        choices: userValues
+                    }
+                ])
+            ).behaviorArguments;
+    
+            for (let i = 0; i < behaviorArguments.length; i++) {
+                behaviorArguments[i] = userKeys[userValues.indexOf(behaviorArguments[i])];
+            }
+        } else {
+            themedLog.systemError(`[ SYSTEM ] 초대할 유저가 없습니다!`);
+            writeLogFlag = true;
+            return prePrint();
         }
-    } else if ('메세지보내기' === behaviorChoice && me.currentRoom) {
-        optionalParam.room = me.currentRoom;
     }
 
     writeLogFlag = true;
@@ -165,52 +160,34 @@ socket.on('reconnect_failed', () => {
 
 
 socket.on('admin_message', async (data) => {
-    if (data.name) {
-        me.name = data.name;
-    }
-    if (data.hasOwnProperty('loudSpeakerOn')) {
-        me.loudSpeakerOn = data.loudSpeakerOn;
-    }
-    if (data.room) {
-        me.currentRoom = data.room;
-        clear();
-        writeLogFlag = true;
-    }
-    if (data.userMap) {
-        userMap = { ...userMap, ...data.userMap };
-        const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
-        delete userMap[Object.keys(userMap)[idx]];
-    }
-    if (data.roomMap) {
-        roomMap = { ...roomMap, ...data.roomMap };
-    }
-
     themedLog.systemSuccess(`[ SYSTEM ] ${data.message}`);
-
-    await prePrint();
 });
 
 socket.on('admin_data', async (data) => {
-    if (data.name) {
-        me.name = data.name;
-    }
-    if (data.roomMap) {
-        roomMap = { ...roomMap, ...data.roomMap };
-    }
-    if (data.room && data.roomUser) {
-        roomMap[data.room] = data.roomUser;
-    }
-
+    Object.keys(data).forEach(key => {
+        if (key === 'id') me.id = data.id; // reguster
+        if (key === 'name') me.name = data.name; // register, change_name
+        if (key === 'loudSpeakerOn') me.loudSpeakerOn = data.loudSpeakerOn; // update_loud_speaker_settings
+        if (key === 'userMap') { // register, change_name
+            userMap = { ...userMap, ...data.userMap };
+            const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
+            delete userMap[Object.keys(userMap)[idx]];
+        }
+        if (key === 'roomMap') roomMap = { ...roomMap, ...data.roomMap }; // register create_room
+        if (key === 'roomUsers') roomMap[data.roomUsers.room].users = data.roomUsers.users; // disconnect, join_room, leave_room
+        if (key === 'room') { // create_room, join_room
+            me.currentRoom = data.room;
+            clear();
+            writeLogFlag = true;
+        }
+    });
+    
     await prePrint();
 });
 
 socket.on('admin_delete_data', async (data) => {
-    if (data.user) {
-        delete userMap[data.user];
-    }
-    if (data.room) {
-        delete userMap[data.room];
-    }
+    if (data.user) delete userMap[data.user]; // disconnect
+    if (data.room) delete userMap[data.room]; // disconnect, leave_room
 
     await prePrint();
 });
@@ -226,18 +203,15 @@ socket.on('notice', (data) => {
 });
 
 
-socket.on('global_message', async (data) => {
-    themedLog.other(data.user, data.message);
+socket.on('load_speaker', async (data) => {
+    themedLog.other(data.user, `${data.message} [확성기]`);
 
-    await prePrint(writeLogFlag);
+    await prePrint();
 })
 
 socket.on('send_message', async (data) => {
-    if (me.name === data.user) {
-        themedLog.me(data.message);
-    } else {
-        themedLog.other(data.user, data.message);
-    }
+    if (me.name === data.user) themedLog.me(data.message);
+    else themedLog.other(data.user, data.message);
 
-    await prePrint(writeLogFlag);
+    await prePrint();
 })
