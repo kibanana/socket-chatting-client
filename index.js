@@ -7,20 +7,22 @@ const themedLog = require('./themedLog');
 
 let me = { name: undefined, loudSpeakerOn: true, currentRoom: undefined };
 let userMap = {};
+let roomMap = {};
 let writeLogFlag = true;
 
 const choiceLog = async () => {
-    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.currentRoom ? `'${me.currentRoom})'` : '방 없음'}`);
+    console.log(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}, ${me.currentRoom ? `'(${me.currentRoom})'` : '방 없음'}`);
 
     const choiceMap = {};
     choiceMap['이름변경'] = 'change_name';
 
-    if (me.currentRoom) choiceMap['방에서나가기'] = 'leave_room';
-    else choiceMap['방에들어가기'] = '';
-
-    choiceMap['방만들기'] = 'create_room';
-
-    if (me.currentRoom) choiceMap['메세지보내기'] = 'send_message';
+    if (me.currentRoom) {
+        choiceMap['메세지보내기'] = 'send_message';
+        choiceMap['방에서나가기'] = 'leave_room';
+    } else {
+        choiceMap['방에들어가기'] = 'join_room';
+        choiceMap['방만들기'] = 'create_room';
+    }
 
     choiceMap['확성기'] = 'global_message';
     choiceMap['확성기설정변경'] = 'update_global_message_settings';
@@ -56,34 +58,47 @@ const choiceLog = async () => {
     }
 
     if ('방에들어가기' === behaviorChoice) {
-        me.currentRoom = (await inquirer
-            .prompt([
-                {
-                    type: 'rawlist',
-                    name: 'selectedRoom',
-                    message: `어떤 방에 입장하시겠습니까? ${currentRoom ? `현재 '${currentRoom}'` : ''}`,
-                    choices: [] // get_room_list
-                }
-            ])
-        ).selectedRoom;
+        const roomKeys = Object.keys(roomMap);
+        console.log(roomMap);
+        
+        if (roomKeys.length > 0) {
+            me.currentRoom = (await inquirer
+                .prompt([
+                    {
+                        type: 'rawlist',
+                        name: 'selectedRoom',
+                        message: `어떤 방에 입장하시겠습니까? ${currentRoom ? `현재 '${currentRoom}'` : ''}`,
+                        choices: Object.keys(roomMap)
+                    }
+                ])
+            ).selectedRoom;
 
-        clear();
-        console.log(`============= ${me.currentRoom} =============`);
-        writeLogFlag = true;
-        return prePrint();
-    }
+            socket.emit(choiceMap[behaviorChoice], {
+                room: me.currentRoom,
+                arguments: behaviorArguments,
+                ...optionalParam
+            });
 
-    if ('방에서나가기' === behaviorChoice) {
+            clear();
+            console.log(`============= ${me.currentRoom} =============`);
+            writeLogFlag = true;
+            return prePrint();
+        }
+        else {
+            console.log('들어갈 방이 없습니다!');
+           await prePrint();
+        }
+    } else if ('방에서나가기' === behaviorChoice) {
         socket.emit(choiceMap[behaviorChoice], {
             room: me.currentRoom
         });
         me.currentRoom = undefined;
-        return await prePrint();
-    }
-    
-    const userKeys = Object.keys(userMap);
-    const userValues = Object.values(userMap).map(elem => elem.name);
-    if ('방만들기' === behaviorChoice && userKeys.length > 0) {
+        await prePrint();
+    } else if ('방만들기' === behaviorChoice && Object.keys(userMap).length > 0) {
+        const userKeys = Object.keys(userMap);
+        console.log(userKeys);
+        const userValues = Object.values(userMap).map(elem => elem.name);
+        
         behaviorArguments = (await inquirer
             .prompt([
                 {
@@ -98,9 +113,7 @@ const choiceLog = async () => {
         for (let i = 0; i < behaviorArguments.length; i++) {
             behaviorArguments[i] = userKeys[userValues.indexOf(behaviorArguments[i])];
         }
-    }
-
-    if ('메세지보내기' === behaviorChoice && me.currentRoom) {
+    } else if ('메세지보내기' === behaviorChoice && me.currentRoom) {
         optionalParam.room = me.currentRoom;
     }
 
@@ -168,6 +181,9 @@ socket.on('admin_message', async (data) => {
         const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
         delete userMap[Object.keys(userMap)[idx]];
     }
+    if (data.roomMap) {
+        roomMap = { ...roomMap, ...data.roomMap };
+    }
 
     themedLog.systemSuccess(`[ SYSTEM ] ${data.message}`);
 
@@ -178,10 +194,11 @@ socket.on('admin_data', async (data) => {
     if (data.name) {
         me.name = data.name;
     }
-    if (data.userMap) {
-        userMap = { ...userMap, ...data.userMap };
-        const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
-        delete userMap[Object.keys(userMap)[idx]];
+    if (data.roomMap) {
+        roomMap = { ...roomMap, ...data.roomMap };
+    }
+    if (data.room && data.roomUser) {
+        roomMap[data.room] = data.roomUser;
     }
 
     await prePrint();
@@ -190,6 +207,9 @@ socket.on('admin_data', async (data) => {
 socket.on('admin_delete_data', async (data) => {
     if (data.user) {
         delete userMap[data.user];
+    }
+    if (data.room) {
+        delete userMap[data.room];
     }
 
     await prePrint();
