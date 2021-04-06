@@ -5,7 +5,7 @@ const clear = require('clear');
 const inquirer = require('inquirer');
 const themedLog = require('./themedLog');
 
-let me = { name: undefined, loudSpeakerOn: true, currentRoom: undefined };
+let me = { name: undefined, loudSpeakerOn: true, currentRoom: undefined, lastEvent: undefined };
 let userMap = {};
 let roomMap = {};
 let writeLogFlag = true;
@@ -28,7 +28,7 @@ const choiceLog = async () => {
         choiceMap['방만들기'] = 'create_room';
     }
 
-    choiceMap['확성기'] = 'load_speaker';
+    choiceMap['확성기'] = 'loud_speaker';
     choiceMap['확성기설정변경'] = 'update_loud_speaker_settings';
     
     const choices = Object.keys(choiceMap);
@@ -64,9 +64,8 @@ const choiceLog = async () => {
     if ('메세지보내기' === behaviorChoice) {
         optionalParam.room = me.currentRoom;
     } else if ('방에서나가기' === behaviorChoice) {
-        socket.emit(choiceMap[behaviorChoice], { room: me.currentRoom });
+        optionalParam.room = me.currentRoom;
         me.currentRoom = undefined;
-        return writeLogFlag = true;
     } else if ('방에들어가기' === behaviorChoice) {
         if (Object.keys(roomMap).length > 0) {
             const room = (await inquirer
@@ -114,6 +113,8 @@ const choiceLog = async () => {
 
     writeLogFlag = true;
 
+    me.lastEvent = choiceMap[behaviorChoice];
+
     socket.emit(choiceMap[behaviorChoice], {
         text: behaviorText,
         arguments: behaviorArguments,
@@ -130,6 +131,8 @@ const prePrint = async () => {
 
 socket.on('connect', () => {
     themedLog.systemSuccess('[ SYSTEM ] 채팅 서버에 연결되었습니다!');
+
+    me.lastEvent = 'register';
     socket.emit('register');
 });
 
@@ -181,7 +184,6 @@ socket.on('admin_data', async (data) => {
             writeLogFlag = true;
         }
     });
-    
     await prePrint();
 });
 
@@ -203,15 +205,19 @@ socket.on('notice', (data) => {
 });
 
 
-socket.on('load_speaker', async (data) => {
+socket.on('loud_speaker', async (data) => {
     themedLog.other(data.user, `${data.message} [확성기]`);
 
-    await prePrint();
+    if (me.lastEvent === 'loud_speaker') {
+        await prePrint();
+    }
 })
 
 socket.on('send_message', async (data) => {
     if (me.name === data.user) themedLog.me(data.message);
     else themedLog.other(data.user, data.message);
 
-    await prePrint();
+    if (me.lastEvent === 'send_message') {
+        await prePrint();
+    }
 })
