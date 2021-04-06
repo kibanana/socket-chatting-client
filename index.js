@@ -127,7 +127,44 @@ const prePrint = async () => {
         writeLogFlag = false;
         await choiceLog();
     }
-}
+};
+
+// const sendMessage = async () => {
+//     clear();
+
+//     process.stdout.write('\x1Bc')
+     
+//     const myRL = require('serverline')
+     
+//     myRL.init()
+    
+//     myRL.setCompletion(['help', 'command1', 'command2', 'login', 'check', 'ping'])
+//     myRL.setPrompt('> ')
+    
+//     myRL.on('line', function(line) {
+//     console.log('cmd:', line)
+//     switch (line) {
+//         case 'help':
+//         console.log('help: To get this message.')
+//         break
+//         case 'pwd':
+//         console.log('toggle muted', !myRL.isMuted())
+//         myRL.setMuted(!myRL.isMuted(), '> [hidden]')
+//         return true
+//         case 'secret':
+//         return myRL.secret('secret:', function() {
+//             console.log(';)')
+//         })
+//     }
+    
+//     if (myRL.isMuted())
+//         myRL.setMuted(false)
+//     })
+    
+//     myRL.on('SIGINT', function(rl) {
+//     rl.question('Confirm exit: ', (answer) => answer.match(/^y(es)?$/i) ? process.exit(0) : rl.output.write('\x1B[1K> '))
+//     })
+// };
 
 socket.on('connect', () => {
     themedLog.systemSuccess('[ SYSTEM ] 채팅 서버에 연결되었습니다!');
@@ -185,18 +222,18 @@ socket.on('admin_data', async (data) => {
         }
     });
     await prePrint();
+    // if (!me.currentRoom) await prePrint();
+    // else sendMessage();
 });
 
 socket.on('admin_delete_data', async (data) => {
     if (data.user) delete userMap[data.user]; // disconnect
     if (data.room) delete userMap[data.room]; // disconnect, leave_room
-
     await prePrint();
 });
 
 socket.on('admin_error', async (data) => {
     themedLog.systemError(`[ SYSTEM ] ${data.message}`);
-
     await prePrint();
 });
 
@@ -220,4 +257,8 @@ socket.on('send_message', async (data) => {
     if (me.lastEvent === 'send_message') {
         await prePrint();
     }
+    // if (me.lastEvent === 'send_message' && !me.currentRoom) {
+    //     await prePrint();
+    // }
+    // else sendMessage();
 })
