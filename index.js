@@ -14,7 +14,7 @@ const choiceLog = async () => {
     themedLog.systemSuccess(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}`);
     if (me.currentRoom) {
         const roomMaster = roomMap[me.currentRoom].users[0];
-        themedLog.systemSuccess(`============= ${me.currentRoom} ============= (${roomMap[me.currentRoom].users.length}명, 방 주인: ${roomMaster === me.id ? me.name : userMap[roomMaster].name})`);
+        themedLog.systemSuccess(`============= ${roomMap[me.currentRoom].title}~${me.currentRoom} ============= (${roomMap[me.currentRoom].users.length}명, 방 주인: ${roomMaster === me.id ? me.name : userMap[roomMaster].name})`);
     }
 
     const choiceMap = {};
@@ -74,12 +74,12 @@ const choiceLog = async () => {
                         type: 'rawlist',
                         name: 'selectedRoom',
                         message: `어떤 방에 입장하시겠습니까? ${me.currentRoom ? `현재 '${me.currentRoom}'` : ''}`,
-                        choices: Object.keys(roomMap)
+                        choices: Object.keys(roomMap).map(key => `${roomMap[key].title}~${key}`)
                     }
                 ])
             ).selectedRoom;
 
-            optionalParam.room = room;
+            optionalParam.room = room.split('~')[1];
         } else {
             themedLog.systemError(`[ SYSTEM ] 들어갈 방이 없습니다!`);
             writeLogFlag = true;
@@ -166,11 +166,20 @@ const prePrint = async () => {
 //     })
 // };
 
-socket.on('connect', () => {
+socket.on('connect', async () => {
     themedLog.systemSuccess('[ SYSTEM ] 채팅 서버에 연결되었습니다!');
 
+    const { name } = await inquirer
+        .prompt([
+            {
+                type: 'input',
+                name: 'name',
+                message: '이전 계정명이나 사용하고 싶은 계정명을 입력해주세요!',
+            }
+        ]);
+
     me.lastEvent = 'register';
-    socket.emit('register');
+    socket.emit('register', { name });
 });
 
 socket.on('connect_error', (error) => {
@@ -214,14 +223,17 @@ socket.on('admin_data', async (data) => {
             delete userMap[Object.keys(userMap)[idx]];
         }
         if (key === 'roomMap') roomMap = { ...roomMap, ...data.roomMap }; // register create_room
-        if (key === 'roomUsers') roomMap[data.roomUsers.room].users = data.roomUsers.users; // disconnect, join_room, leave_room
+        if (key === 'roomUsers') {
+            const { room, users } = data.roomUsers
+            roomMap[room].users = users; // disconnect, join_room, leave_room
+        }
         if (key === 'room') { // create_room, join_room
             me.currentRoom = data.room;
             clear();
             writeLogFlag = true;
         }
     });
-    await prePrint();
+    if (me.name) await prePrint();
     // if (!me.currentRoom) await prePrint();
     // else sendMessage();
 });
