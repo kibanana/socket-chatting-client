@@ -13,8 +13,8 @@ let writeLogFlag = true;
 const choiceLog = async () => {
     themedLog.systemSuccess(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}`);
     if (me.currentRoom) {
-        const roomMaster = roomMap[me.currentRoom].users[0];
-        themedLog.systemSuccess(`============= ${roomMap[me.currentRoom].title}~${me.currentRoom} ============= (${roomMap[me.currentRoom].users.length}명, 방 주인: ${roomMaster === me.id ? me.name : userMap[roomMaster].name})`);
+        const roomUsers = roomMap[me.currentRoom].users;
+        themedLog.systemSuccess(`============= ${roomMap[me.currentRoom].title}(${me.currentRoom}) ============= (${roomUsers.length}명, 방 주인: ${roomUsers[0] === me.id ? me.name : userMap[roomUsers[0]].name})`);
     }
 
     const choiceMap = {};
