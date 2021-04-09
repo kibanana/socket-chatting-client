@@ -9,6 +9,7 @@ let me = { name: undefined, loudSpeakerOn: true, currentRoom: undefined, lastEve
 let userMap = {};
 let roomMap = {};
 let writeLogFlag = true;
+let prompt = undefined;
 
 const choiceLog = async () => {
     themedLog.systemSuccess(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}`);
@@ -37,7 +38,7 @@ const choiceLog = async () => {
     let behaviorArguments = undefined;
     let optionalParam = {};
 
-    behaviorChoice = (await inquirer
+    prompt = inquirer
         .prompt([
             {
                 type: 'rawlist',
@@ -46,8 +47,9 @@ const choiceLog = async () => {
                 choices: choices,
                 pageSize: 10
             }
-        ])
-    ).behaviorChoice;
+        ]);
+    
+    behaviorChoice = (await prompt).behaviorChoice;
 
     if (['이름변경', '메세지보내기', '방만들기', '확성기'].includes(behaviorChoice)) {
         behaviorText = (await inquirer
@@ -214,7 +216,7 @@ socket.on('admin_message', async (data) => {
 
 socket.on('admin_data', async (data) => {
     Object.keys(data).forEach(key => {
-        if (key === 'id') me.id = data.id; // reguster
+        if (key === 'id') me.id = data.id; // register
         if (key === 'name') me.name = data.name; // register, change_name
         if (key === 'loudSpeakerOn') me.loudSpeakerOn = data.loudSpeakerOn; // update_loud_speaker_settings
         if (key === 'userMap') { // register, change_name
@@ -229,12 +231,13 @@ socket.on('admin_data', async (data) => {
         }
         if (key === 'room') { // create_room, join_room
             me.currentRoom = data.room;
+            prompt.ui.close();
             clear();
             writeLogFlag = true;
         }
     });
     if (me.name) await prePrint();
-    // if (!me.currentRoom) await prePrint();
+    // if (!c) await prePrint();
     // else sendMessage();
 });
 
