@@ -25,6 +25,7 @@ const choiceLog = async () => {
         choiceMap['메세지보내기'] = 'send_message';
         choiceMap['방에서나가기'] = 'leave_room';
 
+        const roomUsers = roomMap[me.currentRoom].users;
         if (roomUsers[0] === me.id) {
             choiceMap['방비밀번호설정변경'] = 'update_room_password';
         }
@@ -67,12 +68,12 @@ const choiceLog = async () => {
         ).behaviorText;
     }
 
-    if ('메세지보내기' === behaviorChoice) {
+    if (behaviorChoice === '메세지보내기') {
         optionalParam.room = me.currentRoom;
-    } else if ('방에서나가기' === behaviorChoice) {
+    } else if (behaviorChoice === '방에서나가기') {
         optionalParam.room = me.currentRoom;
         me.currentRoom = undefined;
-    } else if ('방에들어가기' === behaviorChoice) {
+    } else if (behaviorChoice === '방에들어가기') {
         if (Object.keys(roomMap).length > 0) {
             const room = (await inquirer
                 .prompt([
@@ -80,18 +81,32 @@ const choiceLog = async () => {
                         type: 'rawlist',
                         name: 'selectedRoom',
                         message: `어떤 방에 입장하시겠습니까? ${me.currentRoom ? `현재 '${me.currentRoom}'` : ''}`,
-                        choices: Object.keys(roomMap).map(key => `${roomMap[key].title}(${key}${roomMap[key].password ? ', 잠김' : ', 안 잠김'})`)
+                        choices: Object.keys(roomMap).map(key => `${roomMap[key].title}(${key}${roomMap[key].isLocked ? ', 잠김' : ', 안 잠김'})`)
                     }
                 ])
             ).selectedRoom;
 
-            optionalParam.room = room.split('(').split(',')[0];
+            optionalParam.room = room.split('(');
+            optionalParam.room = optionalParam.room.split(',')[0];
+            
+
+            if (roomMap[optionalParam.room].isLocked) {
+                optionalParam.password = (await inquirer
+                    .prompt([
+                        {
+                            type: 'password',
+                            name: 'password',
+                            message: `방 비밀번호를 입력하세요`
+                        }
+                    ])
+                ).password;
+            }
         } else {
             themedLog.systemError(`[ SYSTEM ] 들어갈 방이 없습니다!`);
             writeLogFlag = true;
             return prePrint();
         }
-    } else if ('방만들기' === behaviorChoice) {
+    } else if (behaviorChoice === '방만들기') {
         const userKeys = Object.keys(userMap);
         if (userKeys.length > 0) {
             const userValues = Object.values(userMap).map(elem => elem.name);
@@ -125,7 +140,7 @@ const choiceLog = async () => {
             writeLogFlag = true;
             return prePrint();
         }
-    } else if ('방비밀번호설정변경' === behaviorChoice) {
+    } else if (behaviorChoice === '방비밀번호설정변경') {
         password = (await inquirer
             .prompt([
                 {
@@ -133,7 +148,8 @@ const choiceLog = async () => {
                     name: 'password',
                     message: `방에 비밀번호를 설정하시겠어요?(아니면 Enter)`
                 }
-            ]).password);
+            ])
+        ).password;
     }
 
     writeLogFlag = true;
@@ -240,19 +256,23 @@ socket.on('admin_message', async (data) => {
 socket.on('admin_data', async (data) => {
     Object.keys(data).forEach(key => {
         if (key === 'id') me.id = data.id; // register
-        if (key === 'name') me.name = data.name; // register, change_name
-        if (key === 'loudSpeakerOn') me.loudSpeakerOn = data.loudSpeakerOn; // update_loud_speaker_settings
-        if (key === 'userMap') { // register, change_name
+        else if (key === 'name') me.name = data.name; // register, change_name
+        else if (key === 'loudSpeakerOn') me.loudSpeakerOn = data.loudSpeakerOn; // update_loud_speaker_settings
+        else if (key === 'userMap') { // register, change_name
             userMap = { ...userMap, ...data.userMap };
             const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
             delete userMap[Object.keys(userMap)[idx]];
         }
-        if (key === 'roomMap') roomMap = { ...roomMap, ...data.roomMap }; // register create_room
-        if (key === 'roomUsers') {
+        else if (key === 'roomMap') roomMap = { ...roomMap, ...data.roomMap }; // register create_room
+        else if (key === 'roomUsers') {
             const { room, users } = data.roomUsers
             roomMap[room].users = users; // disconnect, join_room, leave_room
         }
-        if (key === 'room') { // create_room, join_room
+        else if (key === 'roomIsLocked') { 
+            const { room, isLocked } = data.roomIsLocked
+            roomMap[room].isLocked = isLocked; // update_room_password
+        }
+        else if (key === 'room') { // create_room, join_room
             me.currentRoom = data.room;
             prompt.ui.close();
             clear();
