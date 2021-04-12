@@ -28,6 +28,7 @@ const choiceLog = async () => {
         const roomUsers = roomMap[me.currentRoom].users;
         if (roomUsers[0] === me.id) {
             choiceMap['방비밀번호설정변경'] = 'update_room_password';
+            choiceMap['방폭파하기'] = 'blow_up_room';
         }
     } else {
         choiceMap['방에들어가기'] = 'join_room';
@@ -150,6 +151,9 @@ const choiceLog = async () => {
                 }
             ])
         ).password;
+    } else if (behaviorChoice === '방폭파하기') {
+        optionalParam.room = me.currentRoom;
+        me.currentRoom = undefined;
     }
 
     writeLogFlag = true;
@@ -287,6 +291,8 @@ socket.on('admin_data', async (data) => {
 socket.on('admin_delete_data', async (data) => {
     if (data.user) delete userMap[data.user]; // disconnect
     if (data.room) delete userMap[data.room]; // disconnect, leave_room
+    if (data.myRoom) me.currentRoom = undefined;
+
     await prePrint();
 });
 
@@ -306,7 +312,7 @@ socket.on('loud_speaker', async (data) => {
     if (me.lastEvent === 'loud_speaker') {
         await prePrint();
     }
-})
+});
 
 socket.on('send_message', async (data) => {
     if (me.name === data.user) themedLog.me(data.message);
@@ -319,4 +325,8 @@ socket.on('send_message', async (data) => {
     //     await prePrint();
     // }
     // else sendMessage();
-})
+});
+
+socket.on('blew_up_room', (data) => {
+    socket.emit('blew_up_room', data);
+});
