@@ -29,6 +29,7 @@ const choiceLog = async () => {
         if (roomUsers[0] === me.id) {
             choiceMap['방비밀번호설정변경'] = 'update_room_password';
             choiceMap['방폭파하기'] = 'blow_up_room';
+            choiceMap['유저강퇴시키기'] = 'kick_out_room';
         }
     } else {
         choiceMap['방에들어가기'] = 'join_room';
@@ -88,8 +89,7 @@ const choiceLog = async () => {
             ).selectedRoom;
 
             optionalParam.room = room.split('(');
-            optionalParam.room = optionalParam.room.split(',')[0];
-            
+            optionalParam.room = optionalParam.room.split(',')[0];            
 
             if (roomMap[optionalParam.room].isLocked) {
                 optionalParam.password = (await inquirer
@@ -154,6 +154,24 @@ const choiceLog = async () => {
     } else if (behaviorChoice === '방폭파하기') {
         optionalParam.room = me.currentRoom;
         me.currentRoom = undefined;
+    } else if (behaviorChoice === '유저강퇴시키기') {
+        const roomUsers = roomMap[me.currentRoom].users;
+        if (roomUsers.length > 0 && (roomUsers.length === 1 && roomUsers[0] === me.id)) {
+            behaviorArguments = (await inquirer
+                .prompt([
+                    {
+                        type: 'checkbox',
+                        name: 'behaviorArguments',
+                        message: `어떤 유저를 방에 초대하시겠어요?`,
+                        choices: roomUsers
+                    }
+                ])
+            ).behaviorArguments;
+        } else {
+            themedLog.systemError(`[ SYSTEM ] 강퇴할 유저가 없습니다!`);
+            writeLogFlag = true;
+            return prePrint();
+        }
     }
 
     writeLogFlag = true;
@@ -329,4 +347,8 @@ socket.on('send_message', async (data) => {
 
 socket.on('blew_up_room', (data) => {
     socket.emit('blew_up_room', data);
+});
+
+socket.on('kick_out_room', (data) => {
+    socket.emit('kicked_out_room', data);
 });
