@@ -24,6 +24,10 @@ const choiceLog = async () => {
     if (me.currentRoom) {
         choiceMap['메세지보내기'] = 'send_message';
         choiceMap['방에서나가기'] = 'leave_room';
+
+        if (roomUsers[0] === me.id) {
+            choiceMap['방비밀번호설정변경'] = 'update_room_password';
+        }
     } else {
         choiceMap['방에들어가기'] = 'join_room';
         choiceMap['방만들기'] = 'create_room';
@@ -76,12 +80,12 @@ const choiceLog = async () => {
                         type: 'rawlist',
                         name: 'selectedRoom',
                         message: `어떤 방에 입장하시겠습니까? ${me.currentRoom ? `현재 '${me.currentRoom}'` : ''}`,
-                        choices: Object.keys(roomMap).map(key => `${roomMap[key].title}~${key}`)
+                        choices: Object.keys(roomMap).map(key => `${roomMap[key].title}(${key}${roomMap[key].password ? ', 잠김' : ', 안 잠김'})`)
                     }
                 ])
             ).selectedRoom;
 
-            optionalParam.room = room.split('~')[1];
+            optionalParam.room = room.split('(').split(',')[0];
         } else {
             themedLog.systemError(`[ SYSTEM ] 들어갈 방이 없습니다!`);
             writeLogFlag = true;
@@ -106,11 +110,30 @@ const choiceLog = async () => {
             for (let i = 0; i < behaviorArguments.length; i++) {
                 behaviorArguments[i] = userKeys[userValues.indexOf(behaviorArguments[i])];
             }
+
+            optionalParam.password = (await inquirer
+                .prompt([
+                    {
+                        type: 'password',
+                        name: 'password',
+                        message: `방에 비밀번호를 설정하시겠어요?(없으면 Enter)`
+                    }
+                ])
+            ).password;
         } else {
             themedLog.systemError(`[ SYSTEM ] 초대할 유저가 없습니다!`);
             writeLogFlag = true;
             return prePrint();
         }
+    } else if ('방비밀번호설정변경' === behaviorChoice) {
+        password = (await inquirer
+            .prompt([
+                {
+                    type: 'password',
+                    name: 'password',
+                    message: `방에 비밀번호를 설정하시겠어요?(아니면 Enter)`
+                }
+            ]).password);
     }
 
     writeLogFlag = true;
