@@ -13,24 +13,26 @@ const {
     },
     systemEventType: {
         systemDeleteData,
+        systemNotify,
         systemSendData,
         systemSendError,
         systemSendMessage
     },
     userEventType: {
         userRegister,
-        userNotice,
-        userChangeName,
         userLoudSpeaker,
+        userSendMessage,
+        userKickOutRoom,
+        userBlowUpRoom,
+
+        // choices
+        userChangeName,
         userUpdateLoudSpeakerSettings,
         userCreateRoom,
         usetGetRoomInvitation,
-        userSendMessage,
         userJoinRoom,
         userLeaveRoom,
         userUpdateRoomPassword,
-        userKickOutRoom,
-        userBlowUpRoom,
         userSetRoomNotice,
         userSendRoomInvitation
     }
@@ -61,28 +63,28 @@ const pringChoices = async () => {
         themedLog.systemSuccess(`============= ${roomMap[me.currentRoom].title}(${me.currentRoom}) ============= (${roomUsers.length}명, 방 주인: ${roomUsers[0] === me.id ? me.name : userMap[roomUsers[0]].name})`);
     }
 
-    const choiceMap = {};
-    choiceMap['이름변경'] = 'change_name';
+    const choicesMap = {};
+    choicesMap['이름변경'] = 'change_name';
 
     if (me.currentRoom) {
-        choiceMap['메세지보내기'] = 'send_message';
-        choiceMap['방에서나가기'] = 'leave_room';
+        choicesMap['메세지보내기'] = 'send_message';
+        choicesMap['방에서나가기'] = 'leave_room';
 
         const roomUsers = roomMap[me.currentRoom].users;
         if (roomUsers[0] === me.id) {
-            choiceMap['방비밀번호설정변경'] = 'update_room_password';
-            choiceMap['방폭파하기'] = 'blow_up_room';
-            choiceMap['유저강퇴시키기'] = 'kick_out_room';
+            choicesMap['방비밀번호설정변경'] = 'update_room_password';
+            choicesMap['방폭파하기'] = 'blow_up_room';
+            choicesMap['유저강퇴시키기'] = 'kick_out_room';
         }
     } else {
-        choiceMap['방에들어가기'] = 'join_room';
-        choiceMap['방만들기'] = 'create_room';
+        choicesMap['방에들어가기'] = 'join_room';
+        choicesMap['방만들기'] = 'create_room';
     }
 
-    choiceMap['확성기'] = 'loud_speaker';
-    choiceMap['확성기설정변경'] = 'update_loud_speaker_settings';
+    choicesMap['확성기'] = 'loud_speaker';
+    choicesMap['확성기설정변경'] = 'update_loud_speaker_settings';
     
-    const choices = Object.keys(choiceMap);
+    const choices = Object.keys(choicesMap);
     let behaviorChoice = undefined;
     let behaviorText = undefined;
     let behaviorArguments = undefined;
@@ -219,9 +221,9 @@ const pringChoices = async () => {
 
     writeFlag = true;
 
-    me.lastEvent = choiceMap[behaviorChoice];
+    me.lastEvent = choicesMap[behaviorChoice];
 
-    socket.emit(choiceMap[behaviorChoice], {
+    socket.emit(choicesMap[behaviorChoice], {
         text: behaviorText,
         arguments: behaviorArguments,
         ...optionalParam
@@ -240,8 +242,8 @@ socket.on('connect', async () => {
             }
         ]);
 
-    me.lastEvent = 'register';
-    socket.emit('register', { name });
+    me.lastEvent = userRegister;
+    socket.emit(userRegister, { name });
 });
 
 socket.on('connect_error', (error) => {
@@ -270,11 +272,17 @@ socket.on('reconnect_failed', () => {
 });
 
 
-socket.on('admin_message', async (data) => {
+// system
+
+socket.on(systemNotify, (data) => {
+    themedLog.systemSuccess(`[ 공지 ] ${data.message}`);
+});
+
+socket.on(systemSendMessage, async (data) => {
     themedLog.systemSuccess(`[ SYSTEM ] ${data.message}`);
 });
 
-socket.on('admin_data', async (data) => {
+socket.on(systemSendData, async (data) => {
     Object.keys(data).forEach(key => {
         if (key === 'id') me.id = data.id; // register
         else if (key === 'name') me.name = data.name; // register, change_name
@@ -305,7 +313,7 @@ socket.on('admin_data', async (data) => {
     // else sendMessage();
 });
 
-socket.on('admin_delete_data', async (data) => {
+socket.on(systemDeleteData, async (data) => {
     if (data.user) delete userMap[data.user]; // disconnect
     if (data.room) delete userMap[data.room]; // disconnect, leave_room
     if (data.myRoom) me.currentRoom = undefined;
@@ -313,17 +321,61 @@ socket.on('admin_delete_data', async (data) => {
     await prePrint();
 });
 
-socket.on('admin_error', async (data) => {
+socket.on(systemSendError, async (data) => {
     themedLog.systemError(`[ SYSTEM ] ${data.message}`);
     await prePrint();
 });
 
-socket.on('notice', (data) => {
-    themedLog.systemSuccess(`[ 공지 ] ${data.message}`);
+// room
+socket.on(roomSendMessage, async (data) => {
+    themedLog.systemSuccess(`[ ROOM ] ${data.message}`);
 });
 
+socket.on(roomSendData, async (data) => {
+    Object.keys(data).forEach(key => {
+        if (key === 'id') me.id = data.id; // register
+        else if (key === 'name') me.name = data.name; // register, change_name
+        else if (key === 'loudSpeakerOn') me.loudSpeakerOn = data.loudSpeakerOn; // update_loud_speaker_settings
+        else if (key === 'userMap') { // register, change_name
+            userMap = { ...userMap, ...data.userMap };
+            const idx = Object.values(userMap).map(elem => elem.name).indexOf(me.name);
+            delete userMap[Object.keys(userMap)[idx]];
+        }
+        else if (key === 'roomMap') roomMap = { ...roomMap, ...data.roomMap }; // register create_room
+        else if (key === 'roomUsers') {
+            const { room, users } = data.roomUsers
+            roomMap[room].users = users; // disconnect, join_room, leave_room
+        }
+        else if (key === 'roomIsLocked') { 
+            const { room, isLocked } = data.roomIsLocked
+            roomMap[room].isLocked = isLocked; // update_room_password
+        }
+        else if (key === 'room') { // create_room, join_room
+            me.currentRoom = data.room;
+            prompt.ui.close();
+            clear();
+            writeFlag = true;
+        }
+    });
+    if (me.name) await prePrint();
+    // if (!c) await prePrint();
+    // else sendMessage();
+});
 
-socket.on('loud_speaker', async (data) => {
+socket.on(roomDeleteData, async (data) => {
+    if (data.user) delete userMap[data.user]; // disconnect
+    if (data.room) delete userMap[data.room]; // disconnect, leave_room
+    if (data.myRoom) me.currentRoom = undefined;
+
+    await prePrint();
+});
+
+socket.on(roomSendError, async (data) => {
+    themedLog.systemError(`[ SYSTEM ] ${data.message}`);
+    await prePrint();
+});
+
+socket.on(userLoudSpeaker, async (data) => {
     themedLog.other(data.user, `${data.message} [확성기]`);
 
     if (me.lastEvent === 'loud_speaker') {
@@ -331,23 +383,23 @@ socket.on('loud_speaker', async (data) => {
     }
 });
 
-socket.on('send_message', async (data) => {
+socket.on(userSendMessage, async (data) => {
     if (me.name === data.user) themedLog.me(data.message);
     else themedLog.other(data.user, data.message);
 
-    if (me.lastEvent === 'send_message') {
+    if (me.lastEvent === userSendMessage) {
         await prePrint();
     }
-    // if (me.lastEvent === 'send_message' && !me.currentRoom) {
+    // if (me.lastEvent === userSendMessage && !me.currentRoom) {
     //     await prePrint();
     // }
     // else sendMessage();
 });
 
-socket.on('blew_up_room', (data) => {
-    socket.emit('blew_up_room', data);
+socket.on(userBlowUpRoom, (data) => {
+    socket.emit(userBlowUpRoom, data);
 });
 
-socket.on('kick_out_room', (data) => {
-    socket.emit('kicked_out_room', data);
+socket.on(userKickOutRoom, (data) => {
+    socket.emit(userKickOutRoom, data);
 });
