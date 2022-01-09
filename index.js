@@ -60,32 +60,48 @@ const pringChoices = async () => {
     themedLog.systemSuccess(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}`);
     if (me.currentRoom) {
         const roomUsers = roomMap[me.currentRoom].users;
-        themedLog.systemSuccess(`============= ${roomMap[me.currentRoom].title}(${me.currentRoom}) ============= (${roomUsers.length}명, 방 주인: ${roomUsers[0] === me.id ? me.name : userMap[roomUsers[0]].name})`);
+        const roomTitle = roomMap[me.currentRoom].title;
+        const roomOwnerName = roomUsers[0] === me.id ? me.name : userMap[roomUsers[0]].name;
+        themedLog.systemSuccess(`============= ${roomTitle}(${me.currentRoom}) ============= (${roomUsers.length}명, 방 주인: ${roomOwnerName})`);
     }
 
-    const choicesMap = {};
-    choicesMap['이름변경'] = 'change_name';
+    const choices = [
+        { text: '이름 변경', eventType: userChangeName },
+        { text: '메세지 보내기', eventType: userSendMessage },
+        { text: '방에서 나가기', eventType: userLeaveRoom },
+        { text: '방 비밀번호 변경', eventType: userUpdateRoomPassword },
+        { text: '방 폭파', eventType: userBlowUpRoom },
+        { text: '유저 강퇴', eventType: userKickOutRoom },
+        { text: '방에 들어가기', eventType: userJoinRoom },
+        { text: '방 만들기', eventType: userCreateRoom },
+        { text: '확성기', eventType: userLoudSpeaker },
+        { text: '확성기 설정 변경', eventType: userUpdateLoudSpeakerSettings },
+    ];
+
+    const filteredChoices = [];
+    filteredChoices.push(choices[0]);
 
     if (me.currentRoom) {
-        choicesMap['메세지보내기'] = 'send_message';
-        choicesMap['방에서나가기'] = 'leave_room';
+        filteredChoices.push(choices[1]);
+        filteredChoices.push(choices[2]);
 
         const roomUsers = roomMap[me.currentRoom].users;
         if (roomUsers[0] === me.id) {
-            choicesMap['방비밀번호설정변경'] = 'update_room_password';
-            choicesMap['방폭파하기'] = 'blow_up_room';
-            choicesMap['유저강퇴시키기'] = 'kick_out_room';
+            filteredChoices.push(choices[3]);
+            filteredChoices.push(choices[4]);
+            filteredChoices.push(choices[5]);
         }
     } else {
-        choicesMap['방에들어가기'] = 'join_room';
-        choicesMap['방만들기'] = 'create_room';
+        filteredChoices.push(choices[6]);
+        filteredChoices.push(choices[7]);
     }
 
-    choicesMap['확성기'] = 'loud_speaker';
-    choicesMap['확성기설정변경'] = 'update_loud_speaker_settings';
+    filteredChoices.push(choices[8]);
+    filteredChoices.push(choices[9]);
     
-    const choices = Object.keys(choicesMap);
+    const userChoices = filteredChoices.map(elem => elem.text);
     let behaviorChoice = undefined;
+    let behaviorChoiceEventType = undefined;
     let behaviorText = undefined;
     let behaviorArguments = undefined;
     let optionalParam = {};
@@ -95,32 +111,33 @@ const pringChoices = async () => {
             {
                 type: 'rawlist',
                 name: 'behaviorChoice',
-                message: '어떤 동작을 실행하시겠습니까?',
-                choices: choices,
+                message: '===== 선택지 =====',
+                choices: userChoices,
                 pageSize: 10
             }
         ]);
     
     behaviorChoice = (await prompt).behaviorChoice;
+    behaviorChoiceEventType = filteredChoices.filter(elem => elem.text === behaviorChoice)[0].eventType;
 
-    if (['이름변경', '메세지보내기', '방만들기', '확성기'].includes(behaviorChoice)) {
+    if ([userChangeName, userSendMessage, userCreateRoom, userLoudSpeaker].includes(behaviorChoiceEventType)) {
         behaviorText = (await inquirer
             .prompt([
                 {
                     type: 'input',
                     name: 'behaviorText',
-                    message: `'${behaviorChoice}' 동작 상세정보를 입력해주세요`
+                    message: `'${behaviorChoice}' 상세정보를 입력해주세요`
                 }
             ])
         ).behaviorText;
     }
 
-    if (behaviorChoice === '메세지보내기') {
+    if (behaviorChoiceEventType === userSendMessage) {
         optionalParam.room = me.currentRoom;
-    } else if (behaviorChoice === '방에서나가기') {
+    } else if (behaviorChoiceEventType === userLeaveRoom) {
         optionalParam.room = me.currentRoom;
         me.currentRoom = undefined;
-    } else if (behaviorChoice === '방에들어가기') {
+    } else if (behaviorChoiceEventType === userJoinRoom) {
         if (Object.keys(roomMap).length > 0) {
             const room = (await inquirer
                 .prompt([
@@ -152,7 +169,7 @@ const pringChoices = async () => {
             writeFlag = true;
             return prePrint();
         }
-    } else if (behaviorChoice === '방만들기') {
+    } else if (behaviorChoiceEventType === userCreateRoom) {
         const userKeys = Object.keys(userMap);
         if (userKeys.length > 0) {
             const userValues = Object.values(userMap).map(elem => elem.name);
@@ -186,20 +203,20 @@ const pringChoices = async () => {
             writeFlag = true;
             return prePrint();
         }
-    } else if (behaviorChoice === '방비밀번호설정변경') {
+    } else if (behaviorChoiceEventType === userUpdateRoomPassword) {
         password = (await inquirer
             .prompt([
                 {
                     type: 'password',
                     name: 'password',
-                    message: `방에 비밀번호를 설정하시겠어요?(아니면 Enter)`
+                    message: `방에 비밀번호를 설정하시겠어요? (아니면 Enter)`
                 }
             ])
         ).password;
-    } else if (behaviorChoice === '방폭파하기') {
+    } else if (behaviorChoiceEventType === userBlowUpRoom) {
         optionalParam.room = me.currentRoom;
         me.currentRoom = undefined;
-    } else if (behaviorChoice === '유저강퇴시키기') {
+    } else if (behaviorChoiceEventType === userKickOutRoom) {
         const roomUsers = roomMap[me.currentRoom].users;
         if (roomUsers.length > 0 && (roomUsers.length === 1 && roomUsers[0] === me.id)) {
             behaviorArguments = (await inquirer
@@ -221,9 +238,9 @@ const pringChoices = async () => {
 
     writeFlag = true;
 
-    me.lastEvent = choicesMap[behaviorChoice];
+    me.lastEvent = behaviorChoiceEventType;
 
-    socket.emit(choicesMap[behaviorChoice], {
+    socket.emit(behaviorChoiceEventType, {
         text: behaviorText,
         arguments: behaviorArguments,
         ...optionalParam
@@ -378,7 +395,7 @@ socket.on(roomSendError, async (data) => {
 socket.on(userLoudSpeaker, async (data) => {
     themedLog.other(data.user, `${data.message} [확성기]`);
 
-    if (me.lastEvent === 'loud_speaker') {
+    if (me.lastEvent === userLoudSpeaker) {
         await prePrint();
     }
 });
