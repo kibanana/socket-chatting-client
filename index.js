@@ -1,17 +1,60 @@
 const socket = require(`socket.io-client`)(`http://127.0.0.1:3000`, {
-    transports: [`websocket`]
+    transports: ['websocket']
 });
-const clear = require('clear');
 const inquirer = require('inquirer');
+const clear = require('clear');
 const themedLog = require('./themedLog');
+const {
+    roomEventType: {
+        roomDeleteData,
+        roomSendData,
+        roomSendError,
+        roomSendMessage
+    },
+    systemEventType: {
+        systemDeleteData,
+        systemSendData,
+        systemSendError,
+        systemSendMessage
+    },
+    userEventType: {
+        userRegister,
+        userNotice,
+        userChangeName,
+        userLoudSpeaker,
+        userUpdateLoudSpeakerSettings,
+        userCreateRoom,
+        usetGetRoomInvitation,
+        userSendMessage,
+        userJoinRoom,
+        userLeaveRoom,
+        userUpdateRoomPassword,
+        userKickOutRoom,
+        userBlowUpRoom,
+        userSetRoomNotice,
+        userSendRoomInvitation
+    }
+} = require('./lib');
 
-let me = { name: undefined, loudSpeakerOn: true, currentRoom: undefined, lastEvent: undefined };
+let me = {
+    name: null,
+    loudSpeakerOn: true,
+    currentRoom: null,
+    lastEvent: null
+};
 let userMap = {};
 let roomMap = {};
-let writeLogFlag = true;
-let prompt = undefined;
+let writeFlag = true;
+let prompt = null;
 
-const choiceLog = async () => {
+const prePrint = async () => {
+    if (writeFlag) {
+        writeFlag = false;
+        await pringChoices();
+    }
+};
+
+const pringChoices = async () => {
     themedLog.systemSuccess(`[ ${me.name} ] - 확성기 ${me.loudSpeakerOn ? 'O' : 'X'}`);
     if (me.currentRoom) {
         const roomUsers = roomMap[me.currentRoom].users;
@@ -104,7 +147,7 @@ const choiceLog = async () => {
             }
         } else {
             themedLog.systemError(`[ SYSTEM ] 들어갈 방이 없습니다!`);
-            writeLogFlag = true;
+            writeFlag = true;
             return prePrint();
         }
     } else if (behaviorChoice === '방만들기') {
@@ -138,7 +181,7 @@ const choiceLog = async () => {
             ).password;
         } else {
             themedLog.systemError(`[ SYSTEM ] 초대할 유저가 없습니다!`);
-            writeLogFlag = true;
+            writeFlag = true;
             return prePrint();
         }
     } else if (behaviorChoice === '방비밀번호설정변경') {
@@ -169,12 +212,12 @@ const choiceLog = async () => {
             ).behaviorArguments;
         } else {
             themedLog.systemError(`[ SYSTEM ] 강퇴할 유저가 없습니다!`);
-            writeLogFlag = true;
+            writeFlag = true;
             return prePrint();
         }
     }
 
-    writeLogFlag = true;
+    writeFlag = true;
 
     me.lastEvent = choiceMap[behaviorChoice];
 
@@ -183,13 +226,6 @@ const choiceLog = async () => {
         arguments: behaviorArguments,
         ...optionalParam
     });
-};
-
-const prePrint = async () => {
-    if (writeLogFlag) {
-        writeLogFlag = false;
-        await choiceLog();
-    }
 };
 
 socket.on('connect', async () => {
@@ -261,7 +297,7 @@ socket.on('admin_data', async (data) => {
             me.currentRoom = data.room;
             prompt.ui.close();
             clear();
-            writeLogFlag = true;
+            writeFlag = true;
         }
     });
     if (me.name) await prePrint();
