@@ -100,44 +100,46 @@ const pringChoices = async () => {
     filteredChoices.push(choices[9]);
     
     const userChoices = filteredChoices.map(elem => elem.text);
-    let behaviorChoice = undefined;
-    let behaviorChoiceEventType = undefined;
-    let behaviorText = undefined;
-    let behaviorArguments = undefined;
-    let optionalParam = {};
+    const userAction = {
+        choice: null,
+        choiceEventType: null,
+        text: null,
+        args: null,
+        optionalArgs: null
+    }
 
     prompt = inquirer
         .prompt([
             {
                 type: 'rawlist',
-                name: 'behaviorChoice',
+                name: 'actionChoice',
                 message: '===== 선택지 =====',
                 choices: userChoices,
                 pageSize: 10
             }
         ]);
     
-    behaviorChoice = (await prompt).behaviorChoice;
-    behaviorChoiceEventType = filteredChoices.filter(elem => elem.text === behaviorChoice)[0].eventType;
+    userAction.choice = (await prompt).actionChoice;
+    userAction.choiceEventType = filteredChoices.filter(elem => elem.text === userAction.choice)[0].eventType;
 
-    if ([userChangeName, userSendMessage, userCreateRoom, userLoudSpeaker].includes(behaviorChoiceEventType)) {
-        behaviorText = (await inquirer
+    if ([userChangeName, userSendMessage, userCreateRoom, userLoudSpeaker].includes(userAction.choiceEventType)) {
+        userAction.text = (await inquirer
             .prompt([
                 {
                     type: 'input',
-                    name: 'behaviorText',
-                    message: `'${behaviorChoice}' 상세정보를 입력해주세요`
+                    name: 'actionText',
+                    message: `'${userAction.choice}' 상세정보를 입력해주세요`
                 }
             ])
-        ).behaviorText;
+        ).actionText;
     }
 
-    if (behaviorChoiceEventType === userSendMessage) {
-        optionalParam.room = me.currentRoom;
-    } else if (behaviorChoiceEventType === userLeaveRoom) {
-        optionalParam.room = me.currentRoom;
-        me.currentRoom = undefined;
-    } else if (behaviorChoiceEventType === userJoinRoom) {
+    if (userAction.choiceEventType === userSendMessage) {
+        userAction.optionalArgs.room = me.currentRoom;
+    } else if (userAction.choiceEventType === userLeaveRoom) {
+        userAction.optionalArgs.room = me.currentRoom;
+        me.currentRoom = null;
+    } else if (userAction.choiceEventType === userJoinRoom) {
         if (Object.keys(roomMap).length > 0) {
             const room = (await inquirer
                 .prompt([
@@ -150,11 +152,11 @@ const pringChoices = async () => {
                 ])
             ).selectedRoom;
 
-            optionalParam.room = room.split('(');
-            optionalParam.room = optionalParam.room.split(',')[0];            
+            userAction.optionalArgs.room = room.split('(');
+            userAction.optionalArgs.room = userAction.optionalArgs.room.split(',')[0];            
 
-            if (roomMap[optionalParam.room].isLocked) {
-                optionalParam.password = (await inquirer
+            if (roomMap[userAction.optionalArgs.room].isLocked) {
+                userAction.optionalArgs.password = (await inquirer
                     .prompt([
                         {
                             type: 'password',
@@ -169,27 +171,27 @@ const pringChoices = async () => {
             writeFlag = true;
             return prePrint();
         }
-    } else if (behaviorChoiceEventType === userCreateRoom) {
+    } else if (userAction.choiceEventType === userCreateRoom) {
         const userKeys = Object.keys(userMap);
         if (userKeys.length > 0) {
             const userValues = Object.values(userMap).map(elem => elem.name);
             
-            behaviorArguments = (await inquirer
+            userAction.args = (await inquirer
                 .prompt([
                     {
                         type: 'checkbox',
-                        name: 'behaviorArguments',
+                        name: 'actionArgs',
                         message: `어떤 유저를 방에 초대하시겠어요?`,
                         choices: userValues
                     }
                 ])
-            ).behaviorArguments;
+            ).actionArgs;
     
-            for (let i = 0; i < behaviorArguments.length; i++) {
-                behaviorArguments[i] = userKeys[userValues.indexOf(behaviorArguments[i])];
+            for (let i = 0; i < userAction.args.length; i++) {
+                userAction.args[i] = userKeys[userValues.indexOf(userAction.args[i])];
             }
 
-            optionalParam.password = (await inquirer
+            userAction.optionalArgs.password = (await inquirer
                 .prompt([
                     {
                         type: 'password',
@@ -203,7 +205,7 @@ const pringChoices = async () => {
             writeFlag = true;
             return prePrint();
         }
-    } else if (behaviorChoiceEventType === userUpdateRoomPassword) {
+    } else if (userAction.choiceEventType === userUpdateRoomPassword) {
         password = (await inquirer
             .prompt([
                 {
@@ -213,22 +215,22 @@ const pringChoices = async () => {
                 }
             ])
         ).password;
-    } else if (behaviorChoiceEventType === userBlowUpRoom) {
-        optionalParam.room = me.currentRoom;
-        me.currentRoom = undefined;
-    } else if (behaviorChoiceEventType === userKickOutRoom) {
+    } else if (userAction.choiceEventType === userBlowUpRoom) {
+        userAction.optionalArgs.room = me.currentRoom;
+        me.currentRoom = null;
+    } else if (userAction.choiceEventType === userKickOutRoom) {
         const roomUsers = roomMap[me.currentRoom].users;
         if (roomUsers.length > 0 && (roomUsers.length === 1 && roomUsers[0] === me.id)) {
-            behaviorArguments = (await inquirer
+            userAction.args = (await inquirer
                 .prompt([
                     {
                         type: 'checkbox',
-                        name: 'behaviorArguments',
+                        name: 'actionArgs',
                         message: `어떤 유저를 방에 초대하시겠어요?`,
                         choices: roomUsers
                     }
                 ])
-            ).behaviorArguments;
+            ).actionArgs;
         } else {
             themedLog.systemError(`[ SYSTEM ] 강퇴할 유저가 없습니다!`);
             writeFlag = true;
@@ -237,13 +239,12 @@ const pringChoices = async () => {
     }
 
     writeFlag = true;
+    me.lastEvent = userAction.choiceEventType;
 
-    me.lastEvent = behaviorChoiceEventType;
-
-    socket.emit(behaviorChoiceEventType, {
-        text: behaviorText,
-        arguments: behaviorArguments,
-        ...optionalParam
+    socket.emit(userAction.choiceEventType, {
+        text: userAction.text,
+        arguments: userAction.args,
+        ...userAction.optionalArgs
     });
 };
 
@@ -333,7 +334,7 @@ socket.on(systemSendData, async (data) => {
 socket.on(systemDeleteData, async (data) => {
     if (data.user) delete userMap[data.user]; // disconnect
     if (data.room) delete userMap[data.room]; // disconnect, leave_room
-    if (data.myRoom) me.currentRoom = undefined;
+    if (data.myRoom) me.currentRoom = null;
 
     await prePrint();
 });
@@ -382,7 +383,7 @@ socket.on(roomSendData, async (data) => {
 socket.on(roomDeleteData, async (data) => {
     if (data.user) delete userMap[data.user]; // disconnect
     if (data.room) delete userMap[data.room]; // disconnect, leave_room
-    if (data.myRoom) me.currentRoom = undefined;
+    if (data.myRoom) me.currentRoom = null;
 
     await prePrint();
 });
