@@ -3,7 +3,7 @@ const socket = require(`socket.io-client`)(`http://127.0.0.1:3000`, {
 });
 const inquirer = require('inquirer');
 const clear = require('clear');
-const themedLog = require('./themedLog');
+const themedLog = require('./modules/themedLog');
 const {
     roomEventType: {
         roomDeleteData,
