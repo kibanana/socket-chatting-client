@@ -3,6 +3,7 @@ const socket = require(`socket.io-client`)(`http://127.0.0.1:3000`, {
 });
 const inquirer = require('inquirer');
 const clear = require('clear');
+const logGenerator = require('./modules/logGenerator');
 const themedLog = require('./modules/themedLog');
 const {
     roomEventType: {
@@ -155,6 +156,7 @@ const printChoices = async () => {
                     ])
             ).selectedRoom;
 
+            // TODO
             userAction.optionalArgs.room = room.split('(').split(',')[0];
 
             if (roomMap[userAction.optionalArgs.room].isLocked) {
@@ -169,7 +171,7 @@ const printChoices = async () => {
                 ).password;
             }
         } else {
-            themedLog.systemError(`[ SYSTEM ] 들어갈 방이 없습니다!`);
+            themedLog.systemError(logGenerator.system(`들어갈 방이 없습니다!`));
             writeFlag = true;
             return prePrint();
         }
@@ -205,7 +207,7 @@ const printChoices = async () => {
                     ])
             ).password;
         } else {
-            themedLog.systemError(`[ SYSTEM ] 초대할 유저가 없습니다!`);
+            themedLog.systemError(logGenerator.system(`초대할 유저가 없습니다!`));
 
             writeFlag = true;
 
@@ -240,7 +242,7 @@ const printChoices = async () => {
                     ])
             ).actionArgs;
         } else {
-            themedLog.systemError(`[ SYSTEM ] 강퇴할 유저가 없습니다!`);
+            themedLog.systemError(logGenerator.system(`강퇴할 유저가 없습니다!`));
 
             writeFlag = true;
             
@@ -259,7 +261,7 @@ const printChoices = async () => {
 };
 
 socket.on('connect', async () => {
-    themedLog.systemSuccess('[ SYSTEM ] 채팅 서버에 연결되었습니다!');
+    themedLog.systemSuccess(logGenerator.system('채팅 서버에 연결되었습니다!'));
 
     const { name } = await inquirer
         .prompt([
@@ -275,38 +277,38 @@ socket.on('connect', async () => {
 });
 
 socket.on('connect_error', (error) => {
-    themedLog.systemError('[ SYSTEM ] 채팅 서버에 연결하는 도중 오류가 발생했습니다!');
+    themedLog.systemError(logGenerator.system('채팅 서버에 연결하는 도중 오류가 발생했습니다!'));
 });
 
 socket.on('connect_error', () => {
-    themedLog.systemError('[ SYSTEM ] 채팅 서버에 연결하는 도중 오류(timeout)가 발생했습니다!');
+    themedLog.systemError(logGenerator.system('채팅 서버에 연결하는 도중 오류(timeout)가 발생했습니다!'));
 });
 
 socket.on('disconnect', () => {
-    themedLog.systemError('[ SYSTEM ] 채팅 서버와 연결이 끊겼습니다!');
+    themedLog.systemError(logGenerator.system('채팅 서버와 연결이 끊겼습니다!'));
     process.exit(0);
 });
 
 socket.on('error', (error) => {
-    themedLog.systemError('[ SYSTEM ] 오류가 발생했습니다!');
+    themedLog.systemError(logGenerator.system('오류가 발생했습니다!'));
 });
 
 socket.on('reconnect', (attemptNumber) => {
-    themedLog.systemSuccess(`[ SYSTEM ] ...재연결중(${attemptNumber})...`);
+    themedLog.systemSuccess(logGenerator.system(`...재연결중(${attemptNumber})...`));
 });
 
 socket.on('reconnect_failed', () => {
-    themedLog.systemError('[ SYSTEM ] 채팅 서버 재연결에 실패했습니다!');
+    themedLog.systemError(logGenerator.system('채팅 서버 재연결에 실패했습니다!'));
 });
 
 
 // system
 socket.on(systemNotify, (data) => {
-    themedLog.systemSuccess(`[ NOTICE ] ${data.message}`);
+    themedLog.systemSuccess(logGenerator.notice(data.message));
 });
 
 socket.on(systemSendMessage, async (data) => {
-    themedLog.systemSuccess(`[ SYSTEM ] ${data.message}`);
+    themedLog.systemSuccess(logGenerator.system(`${data.message}`));
 });
 
 socket.on(systemSendData, async (data) => {
@@ -349,13 +351,13 @@ socket.on(systemDeleteData, async (data) => {
 });
 
 socket.on(systemSendError, async (data) => {
-    themedLog.systemError(`[ SYSTEM ] ${data.message}`);
+    themedLog.systemError(logGenerator.system(data.message));
     await prePrint();
 });
 
 // room
 socket.on(roomSendMessage, async (data) => {
-    themedLog.systemSuccess(`[ ROOM ] ${data.message}`);
+    themedLog.systemSuccess(logGenerator.room(data.message));
 });
 
 socket.on(roomSendData, async (data) => { // userCreateRoom, userLeaveRoom
@@ -379,13 +381,13 @@ socket.on(roomDeleteData, async (data) => {
 });
 
 socket.on(roomSendError, async (data) => {
-    themedLog.systemError(`[ SYSTEM ] ${data.message}`);
+    themedLog.systemError(logGenerator.system(data.message));
     await prePrint();
 });
 
 // user
 socket.on(userLoudSpeaker, async (data) => {
-    themedLog.other(data.user, `[확성기] ${data.message}`);
+    themedLog.other(data.user, logGenerator.loudSpaker(data.message));
 
     if (me.lastEvent === userLoudSpeaker) {
         await prePrint();
